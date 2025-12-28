@@ -269,3 +269,200 @@
   (select (subselect TreeValues even?)
           [1 2 [3 [[4]] 5] [6 [7 8] 9 [[10]]]]))
   ; [[2 4 6 8 10]]
+
+;; ;;;;;;;;;;;;;;;;
+;; I. Operations ;;
+;; ;;;;;;;;;;;;;;;;
+
+;; ;;;;;;;;
+;; 1. Query
+;; ;;;;;;;;
+
+;; select
+;; select-any
+;; select-first
+;; select-one
+;; select-one!
+;; selected-any?
+;; traverse
+;; traverse-all
+
+;; ;;;;;;;;;;;;
+;; 2. Transform
+;; ;;;;;;;;;;;;
+
+;; transform
+;; multi-transform
+;; replace-in
+;; setval
+;; vtransform
+
+;; ;;;;;;;;;;;;;;;;;
+;; II. Navigators ;;
+;; ;;;;;;;;;;;;;;;;;
+
+;; ;;;;;;;;
+;; 1. Maps
+;; ;;;;;;;;
+
+;; ALL
+;; MAP-KEYS
+;; MAP-VALS
+;; compact
+;; keypath
+;; map-key
+;; submap
+;; must
+
+;; ;;;;;;;;;;;;
+;; 2. Sequences
+;; ;;;;;;;;;;;;
+
+;; ALL
+;; ALL-WITH-META
+;; AFTER-ELEM
+;; BEFORE-ELEM
+;; BEGINNING
+;; END
+;; FIRST
+;; INDEXED-VALS
+;; LAST
+;; before-index
+;; compact
+;; continuous-subseqs
+;; filterer
+;; index-nav
+;; nthpath
+;; srange
+;; srange-dynamic
+
+;; ;;;;;;;
+;; 3. Sets
+;; ;;;;;;;
+
+;; ALL
+;; NONE-ELEM
+;; compact
+;; set-elem
+;; subset
+
+;; ;;;;;;;;;;;;;;;;;;;
+;; 4. Keywords/Symbols
+;; ;;;;;;;;;;;;;;;;;;;
+
+;; NAME
+;; NAMESPACE
+
+;; ;;;;;;;;
+;; 5. Atoms
+;; ;;;;;;;;
+
+;; ATOM
+
+;; ;;;;;;;;;;
+;; 6. Strings
+;; ;;;;;;;;;;
+
+;; BEGINNING
+;; END
+;; FIRST
+;; LAST
+;; regex-nav
+;; srange
+
+;; ;;;;;;;;;;;
+;; 7. Metadata
+;; ;;;;;;;;;;;
+
+;; ALL-WITH-META
+;; META
+
+;; ;;;;;;;;
+;; 8. Views
+;; ;;;;;;;;
+
+;; NIL->LIST
+;; NIL->SET
+;; NIL->VECTOR
+;; nil->val
+;; parser
+;; transformed
+;; traversed
+;; view
+
+;; ;;;;;;;;;;;;;;;;;;;
+;; 9. Value collection
+;; ;;;;;;;;;;;;;;;;;;;
+
+;; DISPENSE
+;; VAL
+;; collect
+;; collect-one
+;; collected?
+;; putval
+;; with-fresh-collected
+
+;; ;;;;;;;;;;;
+;; 10. Control
+;; ;;;;;;;;;;;
+
+;; STAY
+;; STOP
+;; cond-path
+;; continue-then-stay
+;; if-path
+;; multi-path
+;; stay-then-continue
+;; subselect
+
+;; ;;;;;;;;;;;
+;; 11. Filters
+;; ;;;;;;;;;;;
+
+;; pred
+;; pred=
+;; pred<
+;; pred>
+;; pred<=
+;; pred>=
+;; not-selected?
+;; selected?
+
+;; ;;;;;;;;;;;
+;; 12. Walking
+;; ;;;;;;;;;;;
+
+;; codewalker
+;; walker
+
+;; ;;;;;;;;;;;;;;;;;;;
+;; 13. Multi-transform
+;; ;;;;;;;;;;;;;;;;;;;
+
+;; terminal
+;; terminal-val
+;; vterminal
+
+;; ;;;;;;;;;;;;;;;;;;;;;
+;; 14. Custom navigators
+;; ;;;;;;;;;;;;;;;;;;;;;
+
+;; declarepath
+;; defprotocolpath
+;; extend-protocolpath
+;; local-declarepath
+;; path
+;; providepath
+;; recursive-path
+;; defcollector
+;; defdynamicnav
+;; defnav
+;; eachnav
+;; nav
+
+;; ;;;;;;;;
+;; 15. Misc
+;; ;;;;;;;;
+
+;; TODO: go through all macros and navigators to see what hasn't been covered
+;; comp-paths
