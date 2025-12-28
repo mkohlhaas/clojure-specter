@@ -270,6 +270,9 @@
           [1 2 [3 [[4]] 5] [6 [7 8] 9 [[10]]]]))
   ; [[2 4 6 8 10]]
 
+;; following outline taken from
+;; [Cheatsheet](https://github.com/redplanetlabs/specter/wiki/Cheat-Sheet)
+
 ;; ;;;;;;;;;;;;;;;;
 ;; I. Operations ;;
 ;; ;;;;;;;;;;;;;;;;
@@ -278,24 +281,120 @@
 ;; 1. Query
 ;; ;;;;;;;;
 
+;; ;;;;;;
 ;; select
+;; ;;;;;;
+
+(select [ALL even?] (range 10))  ; [0 2 4 6 8]
+(select :a          {:a 0 :b 1}) ; [0]
+(select ALL         {:a 0 :b 1}) ; [[:a 0] [:b 1]]
+
+;; ;;;;;;;;;;
 ;; select-any
+;; ;;;;;;;;;;
+
+(select-any STAY :a) ; :a
+(select-any even? 3) ; :com.rpl.specter.impl/NONE
+
+(comment
+  (select STAY :a)  ; [:a]
+  (select even? 3)) ; []
+
+;; ;;;;;;;;;;;;
 ;; select-first
+;; ;;;;;;;;;;;;
+
+(select-first ALL   (range 10)) ; 0
+(select-first FIRST (range 10)) ; 0 (returns the result itself if the result is not a sequence)
+
+;; ;;;;;;;;;;
 ;; select-one
+;; ;;;;;;;;;;
+
+(select     (srange 2 7) (range 10)) ; [[2 3 4 5 6]]
+(select-one (srange 2 7) (range 10)) ; [2 3 4 5 6]
+
+(comment
+  (select-one ALL (range 10)))
+  ; (err) Execution error (ExceptionInfo)
+  ; (err) More than one element found in structure
+
+;; ;;;;;;;;;;;
 ;; select-one!
+;; ;;;;;;;;;;;
+
+(select-one! FIRST (range 5)) ; 0
+
+(comment
+  (select-one! [ALL even? odd?] (range 10))
+  ; (err) Execution error (ExceptionInfo)
+  ; (err) Found no elements for select-one!
+
+  (select-one! [ALL even?] (range 10)))
+  ; (err) Execution error (ExceptionInfo)
+  ; (err) More than one element found in structure
+
+;; ;;;;;;;;;;;;;
 ;; selected-any?
+;; ;;;;;;;;;;;;;
+
+(selected-any? STAY :a)          ; true
+(selected-any? even? 3)          ; false
+(selected-any? ALL   (range 10)) ; true
+(selected-any? ALL   [])         ; false
+
+;; ;;;;;;;;
 ;; traverse
+;; ;;;;;;;;
+
+(traverse (walker integer?) [[[1 2]] 3 [4 [[5 6 7]] 8] 9])              ; returns an object implementing clojure.lang.IReduce
+
+(reduce + 0 (traverse ALL (range 10)))                                  ; 45
+(reduce + 0 (traverse (walker integer?) [[[1 2]] 3 [4 [[5 6 7]] 8] 9])) ; 45
+(into #{}   (traverse (walker integer?) [[1 2] 1 [[3 [4 4 [2]]]]]))     ; #{1 4 3 2}
+
+;; ;;;;;;;;;;;;
 ;; traverse-all
+;; ;;;;;;;;;;;;
+
+;; Many common transducer use cases can be expressed more elegantly with `traverse-all`.
+
+;; using vanilla Clojure
+(transduce
+ (comp (map :a) (mapcat identity) (filter odd?))
+ +
+ [{:a [1 2]} {:a [3]} {:a [4 5]}])
+; 9
+
+(transduce
+ (traverse-all [:a ALL odd?])
+ +
+ [{:a [1 2]} {:a [3]} {:a [4 5]}])
+; 9
 
 ;; ;;;;;;;;;;;;
 ;; 2. Transform
 ;; ;;;;;;;;;;;;
 
+;; ;;;;;;;;;
 ;; transform
+;; ;;;;;;;;;
+
+;; ;;;;;;;;;;;;;;;
 ;; multi-transform
+;; ;;;;;;;;;;;;;;;
+
+;; ;;;;;;;;;;
 ;; replace-in
+;; ;;;;;;;;;;
+
+;; ;;;;;;
 ;; setval
+;; ;;;;;;
+
+;; ;;;;;;;;;;
 ;; vtransform
+;; ;;;;;;;;;;
 
 ;; ;;;;;;;;;;;;;;;;;
 ;; II. Navigators ;;
@@ -305,164 +404,421 @@
 ;; 1. Maps
 ;; ;;;;;;;;
 
+;; ;;;
 ;; ALL
+;; ;;;
+
+;; ;;;;;;;;
 ;; MAP-KEYS
+;; ;;;;;;;;
+
+;; ;;;;;;;;
 ;; MAP-VALS
+;; ;;;;;;;;
+
+;; ;;;;;;;
 ;; compact
+;; ;;;;;;;
+
+;; ;;;;;;;
 ;; keypath
+;; ;;;;;;;
+
+;; ;;;;;;;
 ;; map-key
+;; ;;;;;;;
+
+;; ;;;;;;
 ;; submap
+;; ;;;;;;
+
+;; ;;;;
 ;; must
+;; ;;;;
 
 ;; ;;;;;;;;;;;;
 ;; 2. Sequences
 ;; ;;;;;;;;;;;;
 
+;; ;;;
 ;; ALL
+;; ;;;
+
+;; ;;;;;;;;;;;;;
 ;; ALL-WITH-META
+;; ;;;;;;;;;;;;;
+
+;; ;;;;;;;;;;
 ;; AFTER-ELEM
+;; ;;;;;;;;;;
+
+;; ;;;;;;;;;;;
 ;; BEFORE-ELEM
+;; ;;;;;;;;;;;
+
+;; ;;;;;;;;;
 ;; BEGINNING
+;; ;;;;;;;;;
+
+;; ;;;
 ;; END
+;; ;;;
+
+;; ;;;;;
 ;; FIRST
+;; ;;;;;
+
+;; ;;;;;;;;;;;;
 ;; INDEXED-VALS
+;; ;;;;;;;;;;;;
+
+;; ;;;;
 ;; LAST
+;; ;;;;
+
+;; ;;;;;;;;;;;;
 ;; before-index
+;; ;;;;;;;;;;;;
+
+;; ;;;;;;;
 ;; compact
+;; ;;;;;;;
+
+;; ;;;;;;;;;;;;;;;;;;
 ;; continuous-subseqs
+;; ;;;;;;;;;;;;;;;;;;
+
+;; ;;;;;;;;
 ;; filterer
+;; ;;;;;;;;
+
+;; ;;;;;;;;;
 ;; index-nav
+;; ;;;;;;;;;
+
+;; ;;;;;;;
 ;; nthpath
+;; ;;;;;;;
+
+;; ;;;;;;
 ;; srange
+;; ;;;;;;
+
+;; ;;;;;;;;;;;;;;
 ;; srange-dynamic
+;; ;;;;;;;;;;;;;;
 
 ;; ;;;;;;;
 ;; 3. Sets
 ;; ;;;;;;;
 
+;; ;;;
 ;; ALL
+;; ;;;
+
+;; ;;;;;;;;;
 ;; NONE-ELEM
+;; ;;;;;;;;;
+
+;; ;;;;;;;
 ;; compact
+;; ;;;;;;;
+
+;; ;;;;;;;;
 ;; set-elem
+;; ;;;;;;;;
+
+;; ;;;;;;
 ;; subset
+;; ;;;;;;
 
 ;; ;;;;;;;;;;;;;;;;;;;
 ;; 4. Keywords/Symbols
 ;; ;;;;;;;;;;;;;;;;;;;
 
+;; ;;;;
 ;; NAME
+;; ;;;;
+
+;; ;;;;;;;;;
 ;; NAMESPACE
+;; ;;;;;;;;;
 
 ;; ;;;;;;;;
 ;; 5. Atoms
 ;; ;;;;;;;;
 
+;; ;;;;
 ;; ATOM
+;; ;;;;
 
 ;; ;;;;;;;;;;
 ;; 6. Strings
 ;; ;;;;;;;;;;
 
+;; ;;;;;;;;;
 ;; BEGINNING
+;; ;;;;;;;;;
+
+;; ;;;
 ;; END
+;; ;;;
+
+;; ;;;;;
 ;; FIRST
+;; ;;;;;
+
+;; ;;;;
 ;; LAST
+;; ;;;;
+
+;; ;;;;;;;;;
 ;; regex-nav
+;; ;;;;;;;;;
+
+;; ;;;;;;
 ;; srange
+;; ;;;;;;
 
 ;; ;;;;;;;;;;;
 ;; 7. Metadata
 ;; ;;;;;;;;;;;
 
+;; ;;;;;;;;;;;;;
 ;; ALL-WITH-META
+;; ;;;;;;;;;;;;;
+
+;; ;;;;
 ;; META
+;; ;;;;
 
 ;; ;;;;;;;;
 ;; 8. Views
 ;; ;;;;;;;;
 
+;; ;;;;;;;;;
 ;; NIL->LIST
+;; ;;;;;;;;;
+
+;; ;;;;;;;;
 ;; NIL->SET
+;; ;;;;;;;;
+
+;; ;;;;;;;;;;;
 ;; NIL->VECTOR
+;; ;;;;;;;;;;;
+
+;; ;;;;;;;;
 ;; nil->val
+;; ;;;;;;;;
+
+;; ;;;;;;
 ;; parser
+;; ;;;;;;
+
+;; ;;;;;;;;;;;
 ;; transformed
+;; ;;;;;;;;;;;
+
+;; ;;;;;;;;;
 ;; traversed
+;; ;;;;;;;;;
+
+;; ;;;;
 ;; view
+;; ;;;;
 
 ;; ;;;;;;;;;;;;;;;;;;;
 ;; 9. Value collection
 ;; ;;;;;;;;;;;;;;;;;;;
 
+;; ;;;;;;;;
 ;; DISPENSE
+;; ;;;;;;;;
+
+;; ;;;
 ;; VAL
+;; ;;;
+
+;; ;;;;;;;
 ;; collect
+;; ;;;;;;;
+
+;; ;;;;;;;;;;;
 ;; collect-one
+;; ;;;;;;;;;;;
+
+;; ;;;;;;;;;;
 ;; collected?
+;; ;;;;;;;;;;
+
+;; ;;;;;;
 ;; putval
+;; ;;;;;;
+
+;; ;;;;;;;;;;;;;;;;;;;;
 ;; with-fresh-collected
+;; ;;;;;;;;;;;;;;;;;;;;
 
 ;; ;;;;;;;;;;;
 ;; 10. Control
 ;; ;;;;;;;;;;;
 
+;; ;;;;
 ;; STAY
+;; ;;;;
+
+;; ;;;;
 ;; STOP
+;; ;;;;
+
+;; ;;;;;;;;;
 ;; cond-path
+;; ;;;;;;;;;
+
+;; ;;;;;;;;;;;;;;;;;;
 ;; continue-then-stay
+;; ;;;;;;;;;;;;;;;;;;
+
+;; ;;;;;;;
 ;; if-path
+;; ;;;;;;;
+
+;; ;;;;;;;;;;
 ;; multi-path
+;; ;;;;;;;;;;
+
+;; ;;;;;;;;;;;;;;;;;;
 ;; stay-then-continue
+;; ;;;;;;;;;;;;;;;;;;
+
+;; ;;;;;;;;;
 ;; subselect
+;; ;;;;;;;;;
 
 ;; ;;;;;;;;;;;
 ;; 11. Filters
 ;; ;;;;;;;;;;;
 
+;; ;;;;
 ;; pred
+;; ;;;;
+
+;; ;;;;;
 ;; pred=
+;; ;;;;;
+
+;; ;;;;;
 ;; pred<
+;; ;;;;;
+
+;; ;;;;;
 ;; pred>
+;; ;;;;;
+
+;; ;;;;;;
 ;; pred<=
+;; ;;;;;;
+
+;; ;;;;;;
 ;; pred>=
+;; ;;;;;;
+
+;; ;;;;;;;;;;;;;
 ;; not-selected?
+;; ;;;;;;;;;;;;;
+
+;; ;;;;;;;;;
 ;; selected?
+;; ;;;;;;;;;
 
 ;; ;;;;;;;;;;;
 ;; 12. Walking
 ;; ;;;;;;;;;;;
 
+;; ;;;;;;;;;;
 ;; codewalker
+;; ;;;;;;;;;;
+
+;; ;;;;;;
 ;; walker
+;; ;;;;;;
 
 ;; ;;;;;;;;;;;;;;;;;;;
 ;; 13. Multi-transform
 ;; ;;;;;;;;;;;;;;;;;;;
 
+;; ;;;;;;;;
 ;; terminal
+;; ;;;;;;;;
+
+;; ;;;;;;;;;;;;
 ;; terminal-val
+;; ;;;;;;;;;;;;
+
+;; ;;;;;;;;;
 ;; vterminal
+;; ;;;;;;;;;
 
 ;; ;;;;;;;;;;;;;;;;;;;;;
 ;; 14. Custom navigators
 ;; ;;;;;;;;;;;;;;;;;;;;;
 
+;; ;;;;;;;;;;;
 ;; declarepath
+;; ;;;;;;;;;;;
+
+;; ;;;;;;;;;;;;;;;
 ;; defprotocolpath
+;; ;;;;;;;;;;;;;;;
+
+;; ;;;;;;;;;;;;;;;;;;;
 ;; extend-protocolpath
+;; ;;;;;;;;;;;;;;;;;;;
+
+;; ;;;;;;;;;;;;;;;;;
 ;; local-declarepath
+;; ;;;;;;;;;;;;;;;;;
+
+;; ;;;;
 ;; path
+;; ;;;;
+
+;; ;;;;;;;;;;;
 ;; providepath
+;; ;;;;;;;;;;;
+
+;; ;;;;;;;;;;;;;;
 ;; recursive-path
+;; ;;;;;;;;;;;;;;
+
+;; ;;;;;;;;;;;;
 ;; defcollector
+;; ;;;;;;;;;;;;
+
+;; ;;;;;;;;;;;;;
 ;; defdynamicnav
+;; ;;;;;;;;;;;;;
+
+;; ;;;;;;
 ;; defnav
+;; ;;;;;;
+
+;; ;;;;;;;
 ;; eachnav
+;; ;;;;;;;
+
+;; ;;;
 ;; nav
+;; ;;;
 
 ;; ;;;;;;;;
 ;; 15. Misc
 ;; ;;;;;;;;
 
 ;; TODO: go through all macros and navigators to see what hasn't been covered
+
+;; ;;;;;;;;;;
 ;; comp-paths
+;; ;;;;;;;;;;
+
