@@ -3,7 +3,7 @@
   (:require [com.rpl.specter :refer :all]))
 
 (comment
-  (declare MAP-VALS ALL END filterer compact srange selected? view collect-one putval if-path subselect ; specter stuff
+  (declare MAP-VALS ALL END multi-path filterer compact srange selected? view collect-one putval if-path subselect ; specter stuff
            AccountPath TreeWalker p))                                                                   ; custom  stuff kondo can't resolve
 
 ;; ;;;;;;;;;
@@ -347,6 +347,8 @@
 ;; traverse
 ;; ;;;;;;;;
 
+;; Creates Reducibles!
+
 (traverse (walker integer?) [[[1 2]] 3 [4 [[5 6 7]] 8] 9])              ; returns an object implementing clojure.lang.IReduce
 
 (reduce + 0 (traverse ALL (range 10)))                                  ; 45
@@ -356,6 +358,8 @@
 ;; ;;;;;;;;;;;;
 ;; traverse-all
 ;; ;;;;;;;;;;;;
+
+;; Creates Transducers!
 
 ;; Many common transducer use cases can be expressed more elegantly with `traverse-all`.
 
@@ -380,21 +384,63 @@
 ;; transform
 ;; ;;;;;;;;;
 
+(transform ALL #(* % 2) (range 10))       ; (0 2 4 6 8 10 12 14 16 18)
+(transform [(putval 2) ALL] * (range 10)) ; (0 2 4 6 8 10 12 14 16 18)
+
+(transform [(putval 2) (walker #(and (integer? %) (even? %)))] * [[[[1] 2]] 3 4 [5 6] [7 [[8]]]])
+; [[[[1] 4]] 3 8 [5 12] [7 [[16]]]]
+
+(comment
+  (select [(walker #(and (integer? %) (even? %)))] [[[[1] 2]] 3 4 [5 6] [7 [[8]]]])
+  ; [2 4 6 8]
+
+  (select [(putval 2) (walker #(and (integer? %) (even? %)))] [[[[1] 2]] 3 4 [5 6] [7 [[8]]]]))
+  ; [[2 2] [2 4] [2 6] [2 8]]
+
+(transform [ALL] (fn [[k v]] [k {:key k :val v}]) {:a 0 :b 1})
+; {:a {:key :a, :val 0}, :b {:key :b, :val 1}}
+
 ;; ;;;;;;;;;;;;;;;
 ;; multi-transform
 ;; ;;;;;;;;;;;;;;;
+
+(multi-transform [:a :b (multi-path [:c (terminal-val :done)]
+                                    [:d (terminal inc)]
+                                    [:e (putval 3) (terminal +)])]
+                 {:a {:b {:c :working :d 0 :e 1.5}}})
+; {:a {:b {:c :done, :d 1, :e 4.5}}}
 
 ;; ;;;;;;;;;;
 ;; replace-in
 ;; ;;;;;;;;;;
 
+;; `replace-in` is useful for situations where you need to know the specific values of what was transformed in the data structure.
+
+;; double and save evens
+(replace-in [ALL even?] (fn [x] [(* 2 x) [x]]) (range 10))
+; [(0 1 4 3 8 5 12 7 16 9) (0 2 4 6 8)]
+;  (0 1 2 3 4 5  6 7  8 9) (evens are transformed `(*2 x)`, odds are left alone `[x]`)
+
+;; double evens and save largest even
+(replace-in [ALL even?] (fn [x] [(* 2 x) x]) [3 2 8 5 6]
+            :merge-fn (fn [curr new] (if (nil? curr) new (max curr new))))
+; [[3 4 16 5 12] 8]
+
 ;; ;;;;;;
 ;; setval
 ;; ;;;;;;
 
+(setval [ALL even?] :even (range 10))
+; (:even 1 :even 3 :even 5 :even 7 :even 9)
+
 ;; ;;;;;;;;;;
 ;; vtransform
 ;; ;;;;;;;;;;
+
+(vtransform ALL #(conj %1 %2) (range 10)) ; ([0] [1] [2] [3] [4] [5] [6] [7] [8] [9])
+
+;; Navigates to each value specified by the path and replaces it by the result of running
+;; the transform-fn on two arguments: the collected values as a vector, and the navigated value.
 
 ;; ;;;;;;;;;;;;;;;;;
 ;; II. Navigators ;;
