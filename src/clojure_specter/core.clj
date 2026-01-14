@@ -3,7 +3,7 @@
   (:require [com.rpl.specter :refer :all]))
 
 (comment
-  (declare MAP-VALS ALL END multi-path filterer compact srange selected? view collect-one putval if-path subselect ; specter stuff
+  (declare AFTER-ELEM BEFORE-ELEM BEGINNING ALL-WITH-META MAP-KEYS MAP-VALS ALL END srange-dynamic index-nav continuous-subseqs before-index submap map-key nil->val multi-path filterer compact srange selected? view collect-one putval if-path subselect ; specter stuff
            AccountPath TreeWalker p))                                                                   ; custom  stuff kondo can't resolve
 
 ;; ;;;;;;;;;
@@ -437,10 +437,25 @@
 ;; vtransform
 ;; ;;;;;;;;;;
 
-(vtransform ALL #(conj %1 %2) (range 10)) ; ([0] [1] [2] [3] [4] [5] [6] [7] [8] [9])
+(vtransform ALL #(conj %1 %2) (range 10))
+; ([0] [1] [2] [3] [4] [5] [6] [7] [8] [9])
+
+(comment
+  (conj [] 0)  ; [0]
+  (conj [] 1)  ; [1]
+  ; …
+  (conj [] 9)) ; [9]
 
 ;; Navigates to each value specified by the path and replaces it by the result of running
 ;; the transform-fn on two arguments: the collected values as a vector, and the navigated value.
+
+;; https://github.com/redplanetlabs/specter/issues/238#issue-277999536
+
+(vtransform [:a (putval 2) (putval 3)] (fn [vs v] (+ v (reduce + vs))) {:a 1})
+; {:a 6}
+
+(comment
+  (+ 2 3 1)) ; 6
 
 ;; ;;;;;;;;;;;;;;;;;
 ;; II. Navigators ;;
@@ -454,33 +469,120 @@
 ;; ALL
 ;; ;;;
 
+(select ALL [0 1 2 3])      ; [0 1 2 3]
+(select ALL (list 0 1 2 3)) ; [0 1 2 3]
+
+;; in a map it'll navigate to each key-value pair [key value]
+(select ALL {:a :b, :c :d}) ; [[:a :b] [:c :d]]
+
+(transform ALL identity {:a :b, :c :d}) ; {:a :b, :c :d}
+
+(comment
+  (identity [:a :b])) ; [:a :b]
+
+;; ALL can transform to NONE to remove elements
+(setval [ALL nil?] NONE [1 2 nil 3 nil]) ; [1 2 3]
+
 ;; ;;;;;;;;
 ;; MAP-KEYS
 ;; ;;;;;;;;
+
+;; more efficient than [ALL FIRST]
+
+(select [MAP-KEYS] {:a 3 :b 4}) ; [:a :b]
 
 ;; ;;;;;;;;
 ;; MAP-VALS
 ;; ;;;;;;;;
 
+;; more efficient than [ALL LAST]
+
+(select MAP-VALS {:a :b, :c :d}) ; [:b :d]
+
+(select [MAP-VALS MAP-VALS] {:a {:b :c}, :d {:e :f}}) ; [:c :f]
+
+;; MAP-VALS can transform to NONE to remove elements
+(setval [MAP-VALS even?] NONE {:a 1 :b 2 :c 3 :d 4}) ; {:a 1, :c 3}
+
 ;; ;;;;;;;
 ;; compact
 ;; ;;;;;;;
+
+(setval [:a (compact :b :c)] NONE {:a {:b {:c 1}}}) ; {}
+
+(setval [:a :b (compact :c)] NONE {:a {:b {:c 1}}}) ; {:a {}}
+
+(setval [1 (compact 0)] NONE [1 [2] 3]) ; [1 3]
+
+(comment
+  ;; not sure about the upside of `compact`
+  (setval [:a] NONE {:a {:b {:c 1}}})    ; {}
+  (setval [:a :b] NONE {:a {:b {:c 1}}}) ; {:a {}}
+  (setval [1 0] NONE [1 [2] 3])          ; [1 [] 3]
+  (setval [1] NONE [1 [2] 3]))           ; [1 3]
 
 ;; ;;;;;;;
 ;; keypath
 ;; ;;;;;;;
 
+(select-one (keypath :a) {:a 0})                            ; 0
+(select-one (keypath :a :b) {:a {:b 1}})                    ; 1
+(select [ALL (keypath :a)] [{:a 0} {:b 1}])                 ; [0 nil]
+(select [ALL (keypath :a) (nil->val :boo)] [{:a 0} {:b 1}]) ; [0 :boo] (does not stop navigation)
+
+(comment
+  (select-one :a {:a 0})                                    ; 0
+  (select-one [:a :b] {:a {:b 1}})                          ; 1
+  (select [ALL :a] [{:a 0} {:b 1}])                         ; [0 nil]
+  (select [ALL :a (nil->val :boo)] [{:a 0} {:b 1}]))        ; [0 :boo]
+
 ;; ;;;;;;;
 ;; map-key
 ;; ;;;;;;;
+
+(select [(map-key :a)] {:a 2 :b 3})    ; [:a]
+
+(setval [(map-key :a)] :c {:a 2 :b 3}) ; {:b 3, :c 2}
 
 ;; ;;;;;;
 ;; submap
 ;; ;;;;;;
 
+(select-one (submap [:a :b]) {:a 0, :b 1, :c 2}) ; {:a 0, :b 1}
+
+(comment
+  (select (submap [:a :b]) {:a 0, :b 1, :c 2})) ; [{:a 0, :b 1}]
+
+(select-one (submap [:c]) {:a 0}) ; {}
+
+(comment
+  (select (submap [:c]) {:a 0})) ; [{}]
+
+(transform [(submap [:a :c]) MAP-VALS] ; (submap [:a :c]) returns {:a 0} with no :c
+           inc
+           {:a 0, :b 1})
+; {:b 1, :a 1}
+
+;; we replace the empty submap with {:c 2} and merge with the original structure
+(transform (submap []) #(assoc % :c 2) {:a 0, :b 1}) ; {:a 0, :b 1, :c 2}
+
+(comment
+  (select-one (submap []) {:a 0, :b 1})  ; {}
+  (assoc {} :c 2))                       ; {:c 2}
+
 ;; ;;;;
 ;; must
 ;; ;;;;
+
+(select-one (must :a)    {:a 0})           ; 0
+(select-one (must :a)    {:b 1})           ; nil
+(select-any (must :a)    {:a {:b 2} :c 3}) ; {:b 2}
+(select-any (must :a :b) {:a {:b 2} :c 3}) ; 2
+
+(setval (must :a) NONE {:a 1 :b 2}) ; {:b 2}
+
+(comment
+  (setval (must :a) NONE {:b 2})) ; {:b 2}
 
 ;; ;;;;;;;;;;;;
 ;; 2. Sequences
@@ -490,69 +592,200 @@
 ;; ALL
 ;; ;;;
 
+;; see above
+
 ;; ;;;;;;;;;;;;;
 ;; ALL-WITH-META
 ;; ;;;;;;;;;;;;;
+
+;; ALL-WITH-META is the same as ALL, except it maintains metadata on the structure in transforms.
+;; This navigator exists solely for transforms, especially for codewalker.
+;; There's no metadata to maintain on select, since it navigates into the subvalues.
+
+(select ALL ^{:purpose "Count"} [0 1 2 3])                                    ; [0 1 2 3]
+(meta (select ALL ^{:purpose "Count"} [0 1 2 3]))                             ; nil
+
+(select ALL-WITH-META ^{:purpose "Count"} [0 1 2 3])                          ; [0 1 2 3]
+(meta (select ALL-WITH-META ^{:purpose "Count"} [0 1 2 3]))                   ; nil
+
+(transform ALL-WITH-META inc ^{:purpose "Count"} [0 1 2 3])                   ; [1 2 3 4]
+(meta (transform ALL-WITH-META inc ^{:purpose "Count"} [0 1 2 3]))            ; {:purpose "Count"}
+
+(setval [ALL-WITH-META nil?] NONE ^{:purpose "Count"} [1 2 nil 3 nil])        ; [1 2 3]
+(meta (setval [ALL-WITH-META nil?] NONE ^{:purpose "Count"} [1 2 nil 3 nil])) ; {:purpose "Count"}
 
 ;; ;;;;;;;;;;
 ;; AFTER-ELEM
 ;; ;;;;;;;;;;
 
+(setval AFTER-ELEM 3 [1 2])  ; [1 2 3]
+
 ;; ;;;;;;;;;;;
 ;; BEFORE-ELEM
 ;; ;;;;;;;;;;;
+
+(setval BEFORE-ELEM 1 [2 3]) ; [1 2 3]
 
 ;; ;;;;;;;;;
 ;; BEGINNING
 ;; ;;;;;;;;;
 
+(setval BEGINNING '(0 1) (range 2 7)) ; (0 1 2 3 4 5 6)
+(setval BEGINNING  [0 1] (range 2 7)) ; (0 1 2 3 4 5 6)
+(setval BEGINNING  {0 1} (range 2 7)) ; ([0 1] 2 3 4 5 6)
+(setval BEGINNING '(0 1) [2 3 4])     ; [0 1 2 3 4]
+
+(setval BEGINNING {:foo :baz} {:foo :bar}) ; ([:foo :baz] [:foo :bar])
+
+;; works with strings
+(select-any BEGINNING "abc") ; ""
+(setval BEGINNING "b" "a")   ; "ba"
+
 ;; ;;;
 ;; END
 ;; ;;;
+
+(setval END '(5 6) (range 5)) ; (0 1 2 3 4 5 6)
+(setval END  [5 6] (range 5)) ; (0 1 2 3 4 5 6)
+(setval END  {5 6} (range 5)) ; (0 1 2 3 4 [5 6])
+(setval END '(5 6) [1 2 3 4]) ; [1 2 3 4 5 6]
+
+(setval END {:foo :baz} {:foo :bar}) ; ([:foo :bar] [:foo :baz])
+
+;; works with strings
+(select-any END "abc") ; ""
+(setval END "b" "a")   ; "ab"
 
 ;; ;;;;;
 ;; FIRST
 ;; ;;;;;
 
+(select-one FIRST (range 5))              ; 0
+(select-one FIRST (sorted-map 0 :a 1 :b)) ; [0 :a]
+(select-one FIRST (sorted-set 0 1 2 3))   ; 0
+(select-one FIRST '())                    ; nil
+(select     FIRST '())                    ; []
+
+(setval FIRST NONE [:a :b :c :d :e]) ; [:b :c :d :e]
+
+;; works with strings
+(select-any FIRST    "abc") ; \a
+(setval     FIRST \q "abc") ; "qbc"
+
 ;; ;;;;;;;;;;;;
 ;; INDEXED-VALS
 ;; ;;;;;;;;;;;;
+
+;; INDEXED-VALS navigates to [index elem] pairs for each element in a sequence.
+;; Transforms of index move element at that index to the new index, shifting other elements in the sequence.
+;; Indices seen during transform take into account any shifting from prior sequence elements changing indices.
+
+;; TODO: no idea how this works (opened an issue; https://github.com/redplanetlabs/specter/issues/338)
+
+;; see also test cases https://github.com/redplanetlabs/specter/blob/6119462a4d959834f2d78a6183d74608bf08ab52/test/com/rpl/specter/core_test.cljc#L1657
+
+(select [INDEXED-VALS] [1 2 3 4 5])         ; [[0 1] [1 2] [2 3] [3 4] [4 5]]
+(setval [INDEXED-VALS FIRST] 0 [1 2 3 4 5]) ; [5 4 3 2 1]
+(setval [INDEXED-VALS FIRST] 1 [1 2 3 4 5]) ; [1 5 4 3 2]
+
+(comment
+  (select [INDEXED-VALS FIRST] [1 2 3 4 5])) ; [0 1 2 3 4]
 
 ;; ;;;;
 ;; LAST
 ;; ;;;;
 
+(select-one LAST (range 5))              ; 4
+(select-one LAST (sorted-map 0 :a 1 :b)) ; [1 :b]
+(select-one LAST (sorted-set 0 1 2 3))   ; 3
+(select-one LAST '())                    ; nil
+(select     LAST '())                    ; []
+
+(setval LAST NONE [:a :b :c :d :e]) ; [:a :b :c :d]
+
+;; works with strings
+(select-any LAST "abc") ; \c
+(setval LAST "q" "abc") ; "abq"
+
 ;; ;;;;;;;;;;;;
 ;; before-index
 ;; ;;;;;;;;;;;;
+
+(select-any (before-index 0) [1 2 3]) ; :com.rpl.specter.impl/NONE
+
+(setval (before-index 0) :a [1 2 3]) ; [:a 1 2 3]
+(setval (before-index 1) NONE [1 2 3]) ; [1 2 3]
+(setval (before-index 1) :a [1 2 3]) ; [1 :a 2 3]
+(setval (before-index 3) :a [1 2 3]) ; [1 2 3 :a]
 
 ;; ;;;;;;;
 ;; compact
 ;; ;;;;;;;
 
+;; see above
+
 ;; ;;;;;;;;;;;;;;;;;;
 ;; continuous-subseqs
 ;; ;;;;;;;;;;;;;;;;;;
+
+(select (continuous-subseqs #(< % 10)) [5 6 11 11 3 12 2 5])  ; [[5 6] [3] [2 5]]
+(select (continuous-subseqs #(< % 10)) [12 13])               ; []
+(setval (continuous-subseqs #(< % 10)) [] [3 2 5 11 12 5 20]) ; [11 12 20]
+
+(comment
+  (select (continuous-subseqs #(< % 10)) [3 2 5 11 12 5 20])) ; [[3 2 5] [5]]
 
 ;; ;;;;;;;;
 ;; filterer
 ;; ;;;;;;;;
 
+(select-one (filterer even?) (range 10)) ; [0 2 4 6 8]
+
+;; removes falsy values (`false` and `nil`)
+(select-one (filterer identity) ['() [] #{} {} "" true false nil]) ; [() [] #{} {} "" true]
+
 ;; ;;;;;;;;;
 ;; index-nav
 ;; ;;;;;;;;;
+
+(select [(index-nav 0)] [1 2 3 4 5]) ; [0]
+(select [(index-nav 7)] [1 2 3 4 5]) ; []
+(setval (index-nav 2) 0 [1 2 3 4 5]) ; [3 1 2 4 5]
 
 ;; ;;;;;;;
 ;; nthpath
 ;; ;;;;;;;
 
+(select [(nthpath 0)]        [1 2 3])  ; [1]
+(select [(nthpath 2)]        [1 2 3])  ; [3]
+(setval [(nthpath 2)]   NONE [1 2 3])  ; [1 2]
+(select [(nthpath 0)]        [1 2 3])  ; [1]
+
+(select [(nthpath 0)]   [[0 1 2] 2 3]) ; [[0 1 2]]
+(select [(nthpath 0 0)] [[0 1 2] 2 3]) ; [0]
+
 ;; ;;;;;;
 ;; srange
 ;; ;;;;;;
 
+(select-one (srange 2 4)    (range 5)) ; [2 3]
+(setval     (srange 2 4) [] (range 5)) ; (0 1 4)
+
+(comment
+  (select-one (srange 0 10) (range 5)))
+  ; (err) Execution error (IndexOutOfBoundsException)
+
+;; works with strings
+(select-any (srange 1 3)          "abcd") ; "bc"
+(setval     (srange 1 3) ""       "abcd") ; "ad"
+(setval    [(srange 1 3) END] "x" "abcd") ; "abcxd"
+
 ;; ;;;;;;;;;;;;;;
 ;; srange-dynamic
 ;; ;;;;;;;;;;;;;;
+
+(select-one (srange-dynamic #(.indexOf % 2) #(.indexOf % 4)) (range 5)) ; [2 3]
+(select-one (srange-dynamic (fn [_] 0) #(quot (count %) 2)) (range 10)) ; [0 1 2 3 4]
 
 ;; ;;;;;;;
 ;; 3. Sets
