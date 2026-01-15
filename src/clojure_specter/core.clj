@@ -1,9 +1,10 @@
 #_{:clj-kondo/ignore [:refer-all]}
 (ns clojure-specter.core
-  (:require [com.rpl.specter :refer :all]))
+  (:require [com.rpl.specter :refer :all]
+            [clojure.string :as str])) ; nil
 
 (comment
-  (declare AFTER-ELEM BEFORE-ELEM BEGINNING ALL-WITH-META MAP-KEYS MAP-VALS ALL END srange-dynamic index-nav continuous-subseqs before-index submap map-key nil->val multi-path filterer compact srange selected? view collect-one putval if-path subselect ; specter stuff
+  (declare ATOM AFTER-ELEM BEFORE-ELEM BEGINNING ALL-WITH-META MAP-KEYS MAP-VALS ALL END META NAME NAMESPACE NONE-ELEM VAL DISPENSE with-fresh-collected collect traversed transformed parser regex-nav subset set-elem srange-dynamic index-nav continuous-subseqs before-index submap map-key nil->val multi-path filterer compact srange selected? view collect-one putval if-path subselect ; specter stuff
            AccountPath TreeWalker p))                                                                   ; custom  stuff kondo can't resolve
 
 ;; ;;;;;;;;;
@@ -795,21 +796,38 @@
 ;; ALL
 ;; ;;;
 
+;; see above
+
 ;; ;;;;;;;;;
 ;; NONE-ELEM
 ;; ;;;;;;;;;
+
+(setval NONE-ELEM 3 #{1 2}) ; #{1 3 2}
+
+(setval NONE-ELEM 1 nil) ; #{1}
 
 ;; ;;;;;;;
 ;; compact
 ;; ;;;;;;;
 
+;; see above
+
 ;; ;;;;;;;;
 ;; set-elem
 ;; ;;;;;;;;
 
+(select [(set-elem 3)] #{3 4 5})      ; [3]
+(select [(set-elem 3)] #{4 5})        ; []
+(setval [(set-elem 3)] NONE #{3 4 5}) ; #{4 5}
+
 ;; ;;;;;;
 ;; subset
 ;; ;;;;;;
+
+(select-one (subset #{:a :b}) #{:b :c})   ; #{:b}
+
+;; replaces the #{:a} subset with #{:a :c} and unions back into the original structure
+(setval (subset #{:a}) #{:a :c} #{:a :b}) ; #{:c :b :a}
 
 ;; ;;;;;;;;;;;;;;;;;;;
 ;; 4. Keywords/Symbols
@@ -819,9 +837,17 @@
 ;; NAME
 ;; ;;;;
 
+(select [NAME] :key)                                ; ["key"]
+(select [MAP-KEYS NAME] {:a 3 :b 4 :c 5})           ; ["a" "b" "c"]
+(setval [MAP-KEYS NAME] "q" {'a/b 3 'bbb/c 4 'd 5}) ; {a/q 3, bbb/q 4, q 5}
+
 ;; ;;;;;;;;;
 ;; NAMESPACE
 ;; ;;;;;;;;;
+
+(select [ALL NAMESPACE]     [::test ::fun]) ; ["clojure-specter.core" "clojure-specter.core"]
+(select [ALL NAMESPACE]     [::test  :fun]) ; ["clojure-specter.core" nil]
+(setval [ALL NAMESPACE] "a" [::test  :fun]) ; [:a/test :a/fun]
 
 ;; ;;;;;;;;
 ;; 5. Atoms
@@ -831,6 +857,20 @@
 ;; ATOM
 ;; ;;;;
 
+(let [a (atom 0)]
+  (select-one ATOM a))
+; 0
+
+(let [a (atom 0)]
+  (swap! a inc)
+  (select-one ATOM a))
+; 1
+
+(let [a (atom 0)]
+  (transform ATOM inc a)
+  @a)
+; 1
+
 ;; ;;;;;;;;;;
 ;; 6. Strings
 ;; ;;;;;;;;;;
@@ -839,25 +879,58 @@
 ;; BEGINNING
 ;; ;;;;;;;;;
 
+;; see above
+
 ;; ;;;
 ;; END
 ;; ;;;
+
+;; see above
 
 ;; ;;;;;
 ;; FIRST
 ;; ;;;;;
 
+;; see above
+
 ;; ;;;;
 ;; LAST
 ;; ;;;;
+
+;; see above
 
 ;; ;;;;;;;;;
 ;; regex-nav
 ;; ;;;;;;;;;
 
+;; When supplied with a regex, navigates to every match in a string, and supports replacement with a new substring.
+
+(select (regex-nav #"t") "test")                                                        ; ["t" "t"]
+(select [:a (regex-nav #"t")] {:a "test"})                                              ; ["t" "t"]
+(select [(regex-nav #"(\S+):\ (\d+)") (nthpath 2)] "Mary: 1st George: 2nd Arthur: 3rd") ; ["1" "2" "3"]
+
+(setval (regex-nav #"t") "z" "test")           ; "zesz"
+(setval [:a (regex-nav #"t")] "z" {:a "test"}) ; {:a "zesz"}
+
+(transform (regex-nav #"t") str/capitalize "test")                                                        ; "TesT"
+(transform [:a (regex-nav #"t")] str/capitalize {:a "test"})                                              ; {:a "TesT"}
+(transform (regex-nav #"\s+\w") str/triml "Hello      World!")                                            ; "HelloWorld!"
+(transform (regex-nav #"aa*") (fn [s] (-> s count str)) "aadt")                                           ; "2dt"
+(transform (regex-nav #"[Aa]+") (fn [s] (apply str (take (count s) (repeat "@")))) "Amsterdam Aardvarks") ; "@msterd@m @@rdv@rks"
+(transform (subselect (regex-nav #"\d\w+")) reverse "Mary: 1st George: 2nd Arthur: 3rd")                  ; "Mary: 3rd George: 2nd Arthur: 1st"
+
+;; Specter implicitly converts regexes in paths to call regex-nav
+(setval #"t" "z" "test") ; "zesz"
+
+(comment
+  ;; same as
+  (setval (regex-nav #"t") "z" "test")) ; "zesz"
+
 ;; ;;;;;;
 ;; srange
 ;; ;;;;;;
+
+;; see above
 
 ;; ;;;;;;;;;;;
 ;; 7. Metadata
@@ -867,9 +940,23 @@
 ;; ALL-WITH-META
 ;; ;;;;;;;;;;;;;
 
+;; see above
+
 ;; ;;;;
 ;; META
 ;; ;;;;
+
+(select-one META (with-meta {:a 0} {:meta :data})) ; {:meta :data}
+
+(meta (transform META #(assoc % :meta :datum)
+                 (with-meta {:a 0} {:meta :data})))
+; {:meta :datum}
+
+(comment
+  (with-meta {:a 0} {:meta :data})              ; {:a 0}
+  (meta (with-meta {:a 0} {:meta :data}))       ; {:meta :data}
+  (transform META #(assoc % :meta :datum)
+             (with-meta {:a 0} {:meta :data}))) ; {:a 0}
 
 ;; ;;;;;;;;
 ;; 8. Views
@@ -879,33 +966,73 @@
 ;; NIL->LIST
 ;; ;;;;;;;;;
 
+(select-one NIL->LIST nil)  ; ()
+(select-one NIL->LIST :foo) ; :foo
+
 ;; ;;;;;;;;
 ;; NIL->SET
 ;; ;;;;;;;;
+
+(select-one NIL->SET nil)  ; #{}
+(select-one NIL->SET :foo) ; :foo
 
 ;; ;;;;;;;;;;;
 ;; NIL->VECTOR
 ;; ;;;;;;;;;;;
 
+(select-one NIL->VECTOR nil)  ; []
+(select-one NIL->VECTOR :foo) ; :foo
+
 ;; ;;;;;;;;
 ;; nil->val
 ;; ;;;;;;;;
+
+(select-one (nil->val :a) nil) ; :a
+(select-one (nil->val :a) :b)  ; :b
 
 ;; ;;;;;;
 ;; parser
 ;; ;;;;;;
 
+(defn parse   [email] (str/split email #"@"))
+(defn unparse [email] (str/join "@" email))
+
+(select [ALL (parser parse unparse) #(= "gmail.com" (second %))]
+        ["test1@example.com" "test2@gmail.com" "test3@gmail.com"])
+; [["test2" "gmail.com"] ["test3" "gmail.com"]]
+
+(setval [ALL (parser parse unparse) #(= "gmail.com" (second %)) FIRST END] "+spam" ["test@example.com" "test@gmail.com"])
+; ["test@example.com" "test+spam@gmail.com"]
+
+(comment
+  (select [ALL (parser parse unparse) #(= "gmail.com" (second %)) FIRST]     ["test@example.com" "test@gmail.com"])  ; ["test"]
+  (select [ALL (parser parse unparse) #(= "gmail.com" (second %)) FIRST END] ["test@example.com" "test@gmail.com"])) ; [""]
+
 ;; ;;;;;;;;;;;
 ;; transformed
 ;; ;;;;;;;;;;;
+
+(select-one (transformed [ALL odd?] #(* % 2)) (range 10))               ; (0 2 2 6 4 10 6 14 8 18)
+(transform [(transformed [ALL odd?] #(* % 2)) ALL] #(/ % 2) (range 10)) ; (0 1 1 3 2 5 3 7 4 9)
+
+(comment
+  (select [ALL odd? #(* % 2)] (range 10))) ; [1 3 5 7 9]
 
 ;; ;;;;;;;;;
 ;; traversed
 ;; ;;;;;;;;;
 
+(select-any (traversed ALL +) [1 2 3 4]) ; 10
+
 ;; ;;;;
 ;; view
 ;; ;;;;
+
+(select-one [FIRST (view inc)] (range 5)) ; 1
+
+(comment
+  (select-one [FIRST inc] (range 5))  ; 0
+  (select-one [FIRST]     (range 5))) ; 0
 
 ;; ;;;;;;;;;;;;;;;;;;;
 ;; 9. Value collection
@@ -915,29 +1042,124 @@
 ;; DISPENSE
 ;; ;;;;;;;;
 
+(transform [ALL VAL]          + (range 10)) ; (0 2 4 6 8 10 12 14 16 18)
+(transform [ALL VAL DISPENSE] + (range 10)) ; (0 1 2 3 4 5 6 7 8 9)
+
+(comment
+  (+ 0)  ; 0
+  (+ 1)  ; 1
+  ; …
+  (+ 9)) ; 9
+
 ;; ;;;
 ;; VAL
 ;; ;;;
+
+;; VAL collects the current structure
+
+;; Collected values are passed as initial arguments to the update fn.
+
+(select [VAL ALL] (range 3)) ; [[(0 1 2) 0] [(0 1 2) 1] [(0 1 2) 2]]
+
+(transform [VAL ALL] (fn [val-coll x] (+ x (count val-coll))) (range 5)) ; (5 6 7 8 9)
+
+(comment
+  (+ 0 (count (range 5)))  ; 5
+  (+ 1 (count (range 5)))  ; 6
+  (+ 2 (count (range 5)))  ; 7
+  (+ 3 (count (range 5)))  ; 8
+  (+ 4 (count (range 5)))) ; 9
 
 ;; ;;;;;;;
 ;; collect
 ;; ;;;;;;;
 
+;; collect adds the result of running select with the given path on the current value to the collected vals.
+;; Note that collect, like select, returns a vector containing its results.
+;; If transform is called, each collected value will be passed as an argument to the transforming function with the resulting value as the last argument.
+
+(select-one [(collect ALL) FIRST] (range 3))         ; [[0 1 2] 0]
+(select [(collect ALL) ALL] (range 3))               ; [[[0 1 2] 0] [[0 1 2] 1] [[0 1 2] 2]]
+(select [(collect ALL) (collect ALL) ALL] (range 3)) ; [[[0 1 2] [0 1 2] 0] [[0 1 2] [0 1 2] 1] [[0 1 2] [0 1 2] 2]]
+
+;; add the sum of the evens to the first element of the seq
+(transform [(collect ALL even?) FIRST]
+           (fn [evens first] (reduce + first evens))
+           (range 5))
+; (6 1 2 3 4)
+
+;; replace the first element of the seq with the entire seq
+(transform [(collect ALL) FIRST] (fn [all _] all) (range 3))
+; ([0 1 2] 1 2)
+
 ;; ;;;;;;;;;;;
 ;; collect-one
 ;; ;;;;;;;;;;;
+
+;; collect-one adds the result of running select-one with the given path on the current value to the collected vals.
+;; Note that collect-one, like select-one, returns a single result.
+;; If there is more than one result, an exception will be thrown.
+;; If transform is called, each collected value will be passed as an argument to the transforming function with the resulting value as the last argument.
+
+(select-one [(collect-one FIRST) LAST] (range 5))                        ; [0 4]
+(select     [(collect-one FIRST) ALL] (range 3))                         ; [[0 0] [0 1] [0 2]]
+(transform  [(collect-one :b) :a] + {:a 2, :b 3})                        ; {:a 5, :b 3}
+(transform  [(collect-one :b) (collect-one :c) :a] * {:a 3, :b 5, :c 7}) ; {:a 105, :b 5, :c 7}
 
 ;; ;;;;;;;;;;
 ;; collected?
 ;; ;;;;;;;;;;
 
+;; Creates a filter function navigator that takes in all the collected values as input.
+;; For arguments, can use (collected? [a b] ...) syntax to look at each collected value 
+;; as individual arguments, or (collected? v ...) syntax to capture all the collected values as a single vector.
+
+;; collected? operates in the same fashion as `pred`, but it takes the collected values as its arguments rather than the structure.
+
+#_{:clj-kondo/ignore [:unresolved-symbol]}
+(select [ALL (collect-one FIRST) LAST (collected? [k] (= k :a))] {:a 0 :b 1}) ; [[:a 0]]
+
+#_{:clj-kondo/ignore [:unresolved-symbol]}
+(select [ALL (collect-one FIRST) LAST (collected? [k] (< k 2))]
+        (zipmap (range 5) ["a" "b" "c" "d" "e"]))
+; [[0 "a"] [1 "b"]]
+
+(comment
+  (zipmap (range 5) ["a" "b" "c" "d" "e"]) ; {0 "a", 1 "b", 2 "c", 3 "d", 4 "e"}
+  (select [ALL (collect-one FIRST)]
+          (zipmap (range 5) ["a" "b" "c" "d" "e"])) ; [[0 [0 "a"]] [1 [1 "b"]] [2 [2 "c"]] [3 [3 "d"]] [4 [4 "e"]]]
+  (select [ALL (collect-one FIRST) LAST]
+          (zipmap (range 5) ["a" "b" "c" "d" "e"]))) ; [[0 "a"] [1 "b"] [2 "c"] [3 "d"] [4 "e"]]
+
+#_{:clj-kondo/ignore [:unresolved-symbol]}
+(transform [ALL (collect-one FIRST) LAST (collected? [k] (< k 2)) DISPENSE]
+           str/upper-case
+           (zipmap (range 5) ["a" "b" "c" "d" "e"]))
+; {0 "A", 1 "B", 2 "c", 3 "d", 4 "e"}
+
 ;; ;;;;;;
 ;; putval
 ;; ;;;;;;
 
+;; Adds an external value to the collected vals.
+;; Useful when additional arguments are required to the transform function that would otherwise require partial application or a wrapper function.
+
+;; increment val at path [:a :b] by 3
+(transform [:a :b (putval 3)] + {:a {:b 0}}) ; {:a {:b 3}}
+
 ;; ;;;;;;;;;;;;;;;;;;;;
 ;; with-fresh-collected
 ;; ;;;;;;;;;;;;;;;;;;;;
+
+;; with-fresh-collected continues navigating on the given path with the collected vals reset to [].
+;; Once navigation leaves the scope of with-fresh-collected, the collected vals revert to what they were before.
+
+#_{:clj-kondo/ignore [:unresolved-symbol]}
+(select-any (with-fresh-collected
+              (collect-one (keypath 0))
+              (selected? (collected? [n] (even? n))))
+            [4 2 3])
+; [4 2 3]
 
 ;; ;;;;;;;;;;;
 ;; 10. Control
