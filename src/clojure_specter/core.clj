@@ -4,8 +4,12 @@
             [clojure.string :as str])) ; nil
 
 (comment
-  (declare ATOM AFTER-ELEM BEFORE-ELEM BEGINNING ALL-WITH-META MAP-KEYS MAP-VALS ALL END META NAME NAMESPACE NONE-ELEM VAL DISPENSE STOP not-selected? stay-then-continue continue-then-stay cond-path with-fresh-collected collect traversed transformed parser regex-nav subset set-elem srange-dynamic index-nav continuous-subseqs before-index submap map-key nil->val multi-path filterer compact srange selected? view collect-one putval if-path subselect ; specter stuff
-           AccountPath TreeWalker p))                                                                   ; custom  stuff kondo can't resolve
+  (declare ATOM AFTER-ELEM BEFORE-ELEM BEGINNING ALL-WITH-META MAP-KEYS MAP-VALS ALL END META NAME
+           NAMESPACE NONE-ELEM VAL DISPENSE STOP not-selected? stay-then-continue continue-then-stay
+           cond-path with-fresh-collected collect traversed transformed parser regex-nav subset set-elem
+           srange-dynamic index-nav continuous-subseqs before-index submap map-key nil->val multi-path
+           filterer compact srange selected? view collect-one putval if-path subselect defnav
+           AccountPath TreeWalker AfterFeePath FundsPath DEEP-MAP-VALS SECOND k p n fee-fn akey collect-val nth-elt this structure ignorer next-fn))                                    ; custom  stuff kondo can't resolve
 
 ;; ;;;;;;;;;
 ;; README ;;
@@ -1116,10 +1120,8 @@
 
 ;; collected? operates in the same fashion as `pred`, but it takes the collected values as its arguments rather than the structure.
 
-#_{:clj-kondo/ignore [:unresolved-symbol]}
 (select [ALL (collect-one FIRST) LAST (collected? [k] (= k :a))] {:a 0 :b 1}) ; [[:a 0]]
 
-#_{:clj-kondo/ignore [:unresolved-symbol]}
 (select [ALL (collect-one FIRST) LAST (collected? [k] (< k 2))]
         (zipmap (range 5) ["a" "b" "c" "d" "e"]))
 ; [[0 "a"] [1 "b"]]
@@ -1131,7 +1133,6 @@
   (select [ALL (collect-one FIRST) LAST]
           (zipmap (range 5) ["a" "b" "c" "d" "e"]))) ; [[0 "a"] [1 "b"] [2 "c"] [3 "d"] [4 "e"]]
 
-#_{:clj-kondo/ignore [:unresolved-symbol]}
 (transform [ALL (collect-one FIRST) LAST (collected? [k] (< k 2)) DISPENSE]
            str/upper-case
            (zipmap (range 5) ["a" "b" "c" "d" "e"]))
@@ -1154,7 +1155,6 @@
 ;; with-fresh-collected continues navigating on the given path with the collected vals reset to [].
 ;; Once navigation leaves the scope of with-fresh-collected, the collected vals revert to what they were before.
 
-#_{:clj-kondo/ignore [:unresolved-symbol]}
 (select-any (with-fresh-collected
               (collect-one (keypath 0))
               (selected? (collected? [n] (even? n))))
@@ -1375,30 +1375,22 @@
 
 ;; SECOND
 
-#_{:clj-kondo/ignore [:unresolved-symbol]}
 (declarepath SECOND)
 
-#_{:clj-kondo/ignore [:unresolved-symbol]}
 (providepath SECOND [(srange 1 2) FIRST])
 
-#_{:clj-kondo/ignore [:unresolved-symbol]}
 (select-one SECOND (range 5)) ; 1
 
-#_{:clj-kondo/ignore [:unresolved-symbol]}
 (transform SECOND dec (range 5)) ; (0 0 2 3 4)
 
 ;; DEEP-MAP-VALS
 
-#_{:clj-kondo/ignore [:unresolved-symbol]}
 (declarepath DEEP-MAP-VALS)
 
-#_{:clj-kondo/ignore [:unresolved-symbol]}
 (providepath DEEP-MAP-VALS (if-path map? [MAP-VALS DEEP-MAP-VALS] STAY))
 
-#_{:clj-kondo/ignore [:unresolved-symbol]}
 (select DEEP-MAP-VALS {:a {:b 2} :c {:d 3 :e {:f 4}} :g 5}) ; [2 3 4 5]
 
-#_{:clj-kondo/ignore [:unresolved-symbol]}
 (transform DEEP-MAP-VALS inc {:a {:b 2} :c {:d 3 :e {:f 4}} :g 5}) ; {:a {:b 3}, :c {:d 4, :e {:f 5}}, :g 6}
 
 ;; ;;;;;;;;;;;;;;;
@@ -1410,15 +1402,12 @@
 
 ;; FundsPath
 
-#_{:clj-kondo/ignore [:unresolved-symbol]}
 (defprotocolpath FundsPath)
 
-#_{:clj-kondo/ignore [:unresolved-symbol]}
 (extend-protocolpath FundsPath
                      SingleAccount :funds
                      FamilyAccount [:single-accounts ALL FundsPath])
 
-#_{:clj-kondo/ignore [:unresolved-symbol]}
 (select [ALL FundsPath]
         [(->SingleAccount 100) (->SingleAccount 3)
          (->FamilyAccount [(->SingleAccount 15) (->SingleAccount 12)])])
@@ -1426,15 +1415,12 @@
 
 ;; AfterFeePath 
 
-#_{:clj-kondo/ignore [:unresolved-symbol]}
 (defprotocolpath AfterFeePath [fee-fn])
 
-#_{:clj-kondo/ignore [:unresolved-symbol]}
 (extend-protocolpath AfterFeePath
                      SingleAccount [:funds view]
                      FamilyAccount [:single-accounts ALL AfterFeePath])
 
-#_{:clj-kondo/ignore [:unresolved-symbol]}
 (select [ALL (AfterFeePath dec)]
         [(->SingleAccount 100) (->SingleAccount 3)
          (->FamilyAccount [(->SingleAccount 15) (->SingleAccount 12)])]) ; [100 3 {:funds 15} {:funds 12}]
@@ -1485,7 +1471,6 @@
 
 ;; map-key-walker (parameterized) 
 
-#_{:clj-kondo/ignore [:unresolved-symbol]}
 (def map-key-walker (recursive-path [akey] p [ALL (if-path [FIRST #(= % akey)] LAST [LAST p])]))
 
 (select    (map-key-walker :aaa)     {:a {:aaa 3 :b {:c {:aaa 2} :aaa 1}}}) ; [3 2 1]                                  (get all the vals for key :aaa, regardless of where they are in the structure)
@@ -1504,7 +1489,6 @@
 ;; collect-val-impl must be of the form (collect-val [this structure] body) - it should return the value to be collected.
 
 ;; an informative example is the actual implementation of putval
-#_{:clj-kondo/ignore [:unresolved-symbol]}
 (defcollector putval [val]
   (collect-val [this structure]
                val))
@@ -1515,15 +1499,12 @@
 ;; defdynamicnav
 ;; ;;;;;;;;;;;;;
 
-#_{:clj-kondo/ignore [:unresolved-symbol]}
-(defdynamicnav ignorer [x]
+(defdynamicnav ignorer [n]
   STAY)
 
-#_{:clj-kondo/ignore [:unresolved-symbol]}
 (let [a 1]
   (select-any (ignorer a) 2)) ; 2
 
-#_{:clj-kondo/ignore [:unresolved-symbol]}
 (select-any (ignorer :a) 2)   ; 2
 
 ;; ;;;;;;
@@ -1546,7 +1527,6 @@
 ;; It should find the result of calling nextfn on whatever subcollection of structure this navigator selects.
 ;; Then it should return the result of reconstructing the original structure using the results of the nextfn call.
 
-#_{:clj-kondo/ignore [:unresolved-symbol]}
 (defnav nth-elt [n]
   (select*    [this structure next-fn] (next-fn (nth structure n)))
   #_{:clj-kondo/ignore [:invalid-arity]}
@@ -1556,15 +1536,10 @@
                                            (assoc structurev n ret)
                                            (concat (take n structure) (list ret) (drop (inc n) structure))))))
 
-#_{:clj-kondo/ignore [:unresolved-symbol]}
 (select-one (nth-elt 0) (range 5))           ; 0
-#_{:clj-kondo/ignore [:unresolved-symbol]}
 (select-one (nth-elt 3) (range 5))           ; 3
-#_{:clj-kondo/ignore [:unresolved-symbol]}
 (select-one (nth-elt 3) (range 0 10 2))      ; 6
-#_{:clj-kondo/ignore [:unresolved-symbol]}
 (transform  (nth-elt 1) inc (range 5))       ; (0 2 2 3 4)
-#_{:clj-kondo/ignore [:unresolved-symbol]}
 (transform  (nth-elt 1) inc (vec (range 5))) ; [0 2 2 3 4]
 
 ;; ;;;;;;;
