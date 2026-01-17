@@ -1585,9 +1585,24 @@
 ;; 15. Misc
 ;; ;;;;;;;;
 
-;; TODO: go through all macros and navigators to see what hasn't been covered
-
 ;; ;;;;;;;;;;
 ;; comp-paths
 ;; ;;;;;;;;;;
 
+;; Returns a compiled version of the given path for use with compiled functions.
+
+;; List of compiled functions:
+;; compiled-select
+;; compiled-select-any
+;; compiled-select-first
+;; compiled-select-one
+;; compiled-select-one!
+;; compiled-selected-any?
+;; compiled-setval
+;; compiled-transform
+;; compiled-traverse
+;; compiled-traverse-all
+
+(let [my-path (comp-paths :a :b :c)]
+  (compiled-select-one my-path {:a {:b {:c 0}}}))
+; 0
