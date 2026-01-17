@@ -4,7 +4,7 @@
             [clojure.string :as str])) ; nil
 
 (comment
-  (declare ATOM AFTER-ELEM BEFORE-ELEM BEGINNING ALL-WITH-META MAP-KEYS MAP-VALS ALL END META NAME NAMESPACE NONE-ELEM VAL DISPENSE with-fresh-collected collect traversed transformed parser regex-nav subset set-elem srange-dynamic index-nav continuous-subseqs before-index submap map-key nil->val multi-path filterer compact srange selected? view collect-one putval if-path subselect ; specter stuff
+  (declare ATOM AFTER-ELEM BEFORE-ELEM BEGINNING ALL-WITH-META MAP-KEYS MAP-VALS ALL END META NAME NAMESPACE NONE-ELEM VAL DISPENSE STOP not-selected? stay-then-continue continue-then-stay cond-path with-fresh-collected collect traversed transformed parser regex-nav subset set-elem srange-dynamic index-nav continuous-subseqs before-index submap map-key nil->val multi-path filterer compact srange selected? view collect-one putval if-path subselect ; specter stuff
            AccountPath TreeWalker p))                                                                   ; custom  stuff kondo can't resolve
 
 ;; ;;;;;;;;;
@@ -1169,33 +1169,71 @@
 ;; STAY
 ;; ;;;;
 
+(select-one STAY :foo) ; :foo
+
 ;; ;;;;
 ;; STOP
 ;; ;;;;
+
+(select-one STOP :foo)               ; nil
+(select [ALL STOP] (range 5))        ; []
+(transform [ALL STOP] inc (range 5)) ; (0 1 2 3 4)
 
 ;; ;;;;;;;;;
 ;; cond-path
 ;; ;;;;;;;;;
 
+(select [ALL (cond-path (must :a) :a (must :b) :c)] [{:a 0} {:b 1 :c 2}]) ; [0 2]
+(select [(cond-path (must :a) :b)] {:b 1})                                ; []
+
 ;; ;;;;;;;;;;;;;;;;;;
 ;; continue-then-stay
 ;; ;;;;;;;;;;;;;;;;;;
+
+(select (continue-then-stay MAP-VALS) {:a 0 :b 1 :c 2}) ; [0 1 2 {:a 0, :b 1, :c 2}]
 
 ;; ;;;;;;;
 ;; if-path
 ;; ;;;;;;;
 
+(select (if-path (must :d) :a)      {:a 0, :d 1}) ; [0]
+(select (if-path (must :d) :a :b)   {:a 0, :b 1}) ; [1]
+(select (if-path (must :d) :a)      {:b 0, :d 1}) ; [nil]
+(select (if-path (must :d) :a STOP) {:b 0, :d 1}) ; [nil]  (the same)
+
 ;; ;;;;;;;;;;
 ;; multi-path
 ;; ;;;;;;;;;;
+
+(select (multi-path :a :b) {:a 0, :b 1, :c 2})                                 ; [0 1]
+(select (multi-path (filterer odd?) (filterer even?)) (range 10))              ; [[1 3 5 7 9] [0 2 4 6 8]]
+(transform (multi-path :a :b) (fn [x] (println x) (dec x)) {:a 0, :b 1, :c 2}) ; {:a -1, :b 0, :c 2}
+; (out) 0
+; (out) 1
 
 ;; ;;;;;;;;;;;;;;;;;;
 ;; stay-then-continue
 ;; ;;;;;;;;;;;;;;;;;;
 
+(select (stay-then-continue MAP-VALS) {:a 0 :b 1 :c 2}) ; [{:a 0, :b 1, :c 2} 0 1 2]
+
 ;; ;;;;;;;;;
 ;; subselect
 ;; ;;;;;;;;;
+
+(transform (subselect (walker number?) even?)
+           reverse
+           [1 [[[2]] 3] 5 [6 [7 8]] 10])
+; [1 [[[10]] 3] 5 [8 [7 6]] 2]
+
+(select-any (subselect ALL :a even?)
+            [{:a 1} {:a 2} {:a 4}])
+; [2 4]
+
+(transform (subselect ALL :a even?)
+           reverse
+           [{:a 1} {:a 2} {:a 4}])
+; [{:a 1} {:a 4} {:a 2}]
 
 ;; ;;;;;;;;;;;
 ;; 11. Filters
@@ -1205,33 +1243,59 @@
 ;; pred
 ;; ;;;;
 
+(select [ALL (pred even?)] (range 10)) ; [0 2 4 6 8]
+
 ;; ;;;;;
 ;; pred=
 ;; ;;;;;
+
+(select [ALL (pred= 2)] [1 2 2 3 4 0]) ; [2 2]
 
 ;; ;;;;;
 ;; pred<
 ;; ;;;;;
 
+(select [ALL (pred< 3)] [1 2 2 3 4 0]) ; [1 2 2 0]
+
 ;; ;;;;;
 ;; pred>
 ;; ;;;;;
+
+(select [ALL (pred> 3)] [1 2 2 3 4 0]) ; [4]
 
 ;; ;;;;;;
 ;; pred<=
 ;; ;;;;;;
 
+(select [ALL (pred<= 3)] [1 2 2 3 4 0]) ; [1 2 2 3 0]
+
 ;; ;;;;;;
 ;; pred>=
 ;; ;;;;;;
+
+(select [ALL (pred>= 3)] [1 2 2 3 4 0]) ; [3 4]
 
 ;; ;;;;;;;;;;;;;
 ;; not-selected?
 ;; ;;;;;;;;;;;;;
 
+;; Stops navigation if the path navigator finds a result.
+;; Otherwise continues with the current structure.
+
+(select [ALL (not-selected? even?)] (range 10))                                  ; [1 3 5 7 9]
+(select [ALL (not-selected? [(must :a) even?])] [{:a 0} {:a 1} {:a 2} {:a 3}])   ; [{:a 1} {:a 3}]
+(select-one (not-selected? [ALL (must :a) even?]) [{:a 0} {:a 1} {:a 2} {:a 3}]) ; nil  (path returns [0 2], so navigation stops)
+
 ;; ;;;;;;;;;
 ;; selected?
 ;; ;;;;;;;;;
+
+;; Stops navigation if the path navigator fails to find a result.
+;; Otherwise continues with the current structure.
+
+(select [ALL (selected? even?)] (range 10))                                  ; [0 2 4 6 8]
+(select [ALL (selected? [(must :a) even?])] [{:a 0} {:a 1} {:a 2} {:a 3}])   ; [{:a 0} {:a 2}]
+(select-one (selected? [ALL (must :a) even?]) [{:a 0} {:a 1} {:a 2} {:a 3}]) ; [{:a 0} {:a 1} {:a 2} {:a 3}]  (Path returns [0 2], so selected? returns the entire structure)
 
 ;; ;;;;;;;;;;;
 ;; 12. Walking
@@ -1241,9 +1305,23 @@
 ;; codewalker
 ;; ;;;;;;;;;;
 
+(select (codewalker #(and (map? %) (even? (:a %))))
+        (list (with-meta {:a 2} {:foo :bar}) (with-meta {:a 1} {:foo :baz})))
+; [{:a 2}]
+
+(map meta *1) ; ({:foo :bar})
+
 ;; ;;;;;;
 ;; walker
 ;; ;;;;;;
+
+;; Using clojure.walk, walker executes a depth-first search for nodes where afn returns a truthy value.
+;; When afn returns a truthy value, walker stops searching that branch of the tree and continues its search of the rest of the data structure.
+
+(select (walker #(and (number? %) (even? %)))                  '(1 (3 4) 2 (6)))             ; [4 2 6]
+(select (walker #(and (number? %) (even? %)))                  '(1 (2 (3 4) 5 (6 7)) (8 9))) ; [2 4 6 8]
+(select (walker #(and (counted? %) (even? (count %))))         '(1 (2 (3 4) 5 (6 7)) (8 9))) ; [(2 (3 4) 5 (6 7)) (8 9)]  ((3 4) and (6 7) are not returned because the search halted at (2 (3 4) (5 (6 7))))
+(setval (walker #(and (counted? %) (even? (count %)))) :double '(1 (2 (3 4) 5 (6 7)) (8 9))) ; (1 :double :double)
 
 ;; ;;;;;;;;;;;;;;;;;;;
 ;; 13. Multi-transform
@@ -1253,13 +1331,37 @@
 ;; terminal
 ;; ;;;;;;;;
 
+;; For usage with multi-transform, defines an endpoint in the navigation that will have the parameterized transform function run.
+;; The transform function works just like it does in transform, with collected values given as the first arguments.
+
+(multi-transform [(putval 3) (terminal +)] 1) ; 4
+
+(multi-transform [:a :b (multi-path [:c (terminal inc)]
+                                    [:d (putval 3) (terminal +)])]
+                 {:a {:b {:c 42 :d 1}}})
+; {:a {:b {:c 43, :d 4}}}
+
 ;; ;;;;;;;;;;;;
 ;; terminal-val
 ;; ;;;;;;;;;;;;
 
+(multi-transform (terminal-val 2) 3) ; 2
+
+(comment
+  (multi-transform [(putval 3) (terminal-val 42)] 1) ; 42
+
+  (multi-transform [:a :b (multi-path [:c (terminal-val 42)]
+                                      [:d (putval 3) (terminal-val 43)])]
+                   {:a {:b {:c 42 :d 1}}}))
+  ; {:a {:b {:c 42, :d 43}}}
+
 ;; ;;;;;;;;;
 ;; vterminal
 ;; ;;;;;;;;;
+
+;; vector terminal
+
+(multi-transform [(putval 1) :a (putval 2) :b (vterminal (fn [vs v] [vs v]))] {:a {:b 3}}) ; {:a {:b [[1 2] 3]}}
 
 ;; ;;;;;;;;;;;;;;;;;;;;;
 ;; 14. Custom navigators
@@ -1269,49 +1371,215 @@
 ;; declarepath
 ;; ;;;;;;;;;;;
 
+;; great for defining recursive navigators
+
+;; SECOND
+
+#_{:clj-kondo/ignore [:unresolved-symbol]}
+(declarepath SECOND)
+
+#_{:clj-kondo/ignore [:unresolved-symbol]}
+(providepath SECOND [(srange 1 2) FIRST])
+
+#_{:clj-kondo/ignore [:unresolved-symbol]}
+(select-one SECOND (range 5)) ; 1
+
+#_{:clj-kondo/ignore [:unresolved-symbol]}
+(transform SECOND dec (range 5)) ; (0 0 2 3 4)
+
+;; DEEP-MAP-VALS
+
+#_{:clj-kondo/ignore [:unresolved-symbol]}
+(declarepath DEEP-MAP-VALS)
+
+#_{:clj-kondo/ignore [:unresolved-symbol]}
+(providepath DEEP-MAP-VALS (if-path map? [MAP-VALS DEEP-MAP-VALS] STAY))
+
+#_{:clj-kondo/ignore [:unresolved-symbol]}
+(select DEEP-MAP-VALS {:a {:b 2} :c {:d 3 :e {:f 4}} :g 5}) ; [2 3 4 5]
+
+#_{:clj-kondo/ignore [:unresolved-symbol]}
+(transform DEEP-MAP-VALS inc {:a {:b 2} :c {:d 3 :e {:f 4}} :g 5}) ; {:a {:b 3}, :c {:d 4, :e {:f 5}}, :g 6}
+
 ;; ;;;;;;;;;;;;;;;
 ;; defprotocolpath
 ;; ;;;;;;;;;;;;;;;
+
+(defrecord SingleAccount [funds])
+(defrecord FamilyAccount [single-accounts])
+
+;; FundsPath
+
+#_{:clj-kondo/ignore [:unresolved-symbol]}
+(defprotocolpath FundsPath)
+
+#_{:clj-kondo/ignore [:unresolved-symbol]}
+(extend-protocolpath FundsPath
+                     SingleAccount :funds
+                     FamilyAccount [:single-accounts ALL FundsPath])
+
+#_{:clj-kondo/ignore [:unresolved-symbol]}
+(select [ALL FundsPath]
+        [(->SingleAccount 100) (->SingleAccount 3)
+         (->FamilyAccount [(->SingleAccount 15) (->SingleAccount 12)])])
+; [100 3 15 12]
+
+;; AfterFeePath 
+
+#_{:clj-kondo/ignore [:unresolved-symbol]}
+(defprotocolpath AfterFeePath [fee-fn])
+
+#_{:clj-kondo/ignore [:unresolved-symbol]}
+(extend-protocolpath AfterFeePath
+                     SingleAccount [:funds view]
+                     FamilyAccount [:single-accounts ALL AfterFeePath])
+
+#_{:clj-kondo/ignore [:unresolved-symbol]}
+(select [ALL (AfterFeePath dec)]
+        [(->SingleAccount 100) (->SingleAccount 3)
+         (->FamilyAccount [(->SingleAccount 15) (->SingleAccount 12)])]) ; [100 3 {:funds 15} {:funds 12}]
+[99 2 14 11]
 
 ;; ;;;;;;;;;;;;;;;;;;;
 ;; extend-protocolpath
 ;; ;;;;;;;;;;;;;;;;;;;
 
+;; see above
+
 ;; ;;;;;;;;;;;;;;;;;
 ;; local-declarepath
 ;; ;;;;;;;;;;;;;;;;;
+
+;; no example
 
 ;; ;;;;
 ;; path
 ;; ;;;;
 
+; Same as calling comp-paths, except it caches the composition of the static parts
+; of the path for later re-use (when possible). For almost all idiomatic uses
+; of Specter provides huge speedup. This macro is automatically used by the
+; select/transform/setval/replace-in/etc. macros.
+
+(def MY-PATH (path even?))
+(select [ALL MY-PATH] (range 10)) ; [0 2 4 6 8]
+
 ;; ;;;;;;;;;;;
 ;; providepath
 ;; ;;;;;;;;;;;
+
+;; see above
 
 ;; ;;;;;;;;;;;;;;
 ;; recursive-path
 ;; ;;;;;;;;;;;;;;
 
+;; assists in making recursive paths, both parameterized and unparameterized
+
+;; tree-walker (unparameterized)
+
+(def tree-walker (recursive-path [] p (if-path vector? [ALL p] STAY)))
+
+(select    tree-walker     [1 [2 [3 4] 5] [[6]]]) ; [1 2 3 4 5 6]          (get all of the values nested within vectors)
+(transform tree-walker inc [1 [2 [3 4] 5] [[6]]]) ; [2 [3 [4 5] 6] [[7]]]  (Transform all of the values within vectors)
+
+;; map-key-walker (parameterized) 
+
+#_{:clj-kondo/ignore [:unresolved-symbol]}
+(def map-key-walker (recursive-path [akey] p [ALL (if-path [FIRST #(= % akey)] LAST [LAST p])]))
+
+(select    (map-key-walker :aaa)     {:a {:aaa 3 :b {:c {:aaa 2} :aaa 1}}}) ; [3 2 1]                                  (get all the vals for key :aaa, regardless of where they are in the structure)
+(transform (map-key-walker :aaa) inc {:a {:aaa 3 :b {:c {:aaa 2} :aaa 1}}}) ; {:a {:aaa 4, :b {:c {:aaa 3}, :aaa 2}}}  (transform all the vals for key :aaa, regardless of where they are in the structure)
+
 ;; ;;;;;;;;;;;;
 ;; defcollector
 ;; ;;;;;;;;;;;;
+
+;; (defcollector name params collect-val-impl)
+
+;; Defines a collector with the given name and parameters.
+;; Collectors are navigators which add a value to the list of collected values and do not change the current structure.
+
+;; Note that params should be a vector, as would follow fn.
+;; collect-val-impl must be of the form (collect-val [this structure] body) - it should return the value to be collected.
+
+;; an informative example is the actual implementation of putval
+#_{:clj-kondo/ignore [:unresolved-symbol]}
+(defcollector putval [val]
+  (collect-val [this structure]
+               val))
+
+(transform [ALL (putval 3)] + (range 5)) ; (3 4 5 6 7)
 
 ;; ;;;;;;;;;;;;;
 ;; defdynamicnav
 ;; ;;;;;;;;;;;;;
 
+#_{:clj-kondo/ignore [:unresolved-symbol]}
+(defdynamicnav ignorer [x]
+  STAY)
+
+#_{:clj-kondo/ignore [:unresolved-symbol]}
+(let [a 1]
+  (select-any (ignorer a) 2)) ; 2
+
+#_{:clj-kondo/ignore [:unresolved-symbol]}
+(select-any (ignorer :a) 2)   ; 2
+
 ;; ;;;;;;
 ;; defnav
 ;; ;;;;;;
+
+;; (defnav name params select-impl transform-impl)
+
+;; (defnav name params transform-impl select-impl)
+
+;; Canonically the first is used.
+
+;; Defines a navigator with given name and parameters.
+;; Note that params should be a vector, as would follow fn.
+
+;; select-impl must be of the form (select* [this structure next-fn] body).
+;; It should return the result of calling next-fn on whatever subcollection of structure this navigator selects.
+
+;; transform-impl must be of the form (transform* [this structure next-fn] body).
+;; It should find the result of calling nextfn on whatever subcollection of structure this navigator selects.
+;; Then it should return the result of reconstructing the original structure using the results of the nextfn call.
+
+#_{:clj-kondo/ignore [:unresolved-symbol]}
+(defnav nth-elt [n]
+  (select*    [this structure next-fn] (next-fn (nth structure n)))
+  #_{:clj-kondo/ignore [:invalid-arity]}
+  (transform* [this structure next-fn] (let [structurev (vec structure)
+                                             ret (next-fn (nth structure n))]
+                                         (if (vector? structure)
+                                           (assoc structurev n ret)
+                                           (concat (take n structure) (list ret) (drop (inc n) structure))))))
+
+#_{:clj-kondo/ignore [:unresolved-symbol]}
+(select-one (nth-elt 0) (range 5))           ; 0
+#_{:clj-kondo/ignore [:unresolved-symbol]}
+(select-one (nth-elt 3) (range 5))           ; 3
+#_{:clj-kondo/ignore [:unresolved-symbol]}
+(select-one (nth-elt 3) (range 0 10 2))      ; 6
+#_{:clj-kondo/ignore [:unresolved-symbol]}
+(transform  (nth-elt 1) inc (range 5))       ; (0 2 2 3 4)
+#_{:clj-kondo/ignore [:unresolved-symbol]}
+(transform  (nth-elt 1) inc (vec (range 5))) ; [0 2 2 3 4]
 
 ;; ;;;;;;;
 ;; eachnav
 ;; ;;;;;;;
 
+;; Turns a navigator that takes one argument into a navigator that takes
+;; many arguments and uses the same navigator with each argument. There
+;; is no performance cost to using this. See implementation of `keypath`
+
 ;; ;;;
 ;; nav
 ;; ;;;
+
+;; Returns an "anonymous navigator." (see defnav)
 
 ;; ;;;;;;;;
 ;; 15. Misc
